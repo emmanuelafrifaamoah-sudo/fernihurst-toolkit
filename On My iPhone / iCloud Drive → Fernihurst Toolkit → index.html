@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fernihurst Manager Toolkit</title>
+  <style>
+    :root { font-family: -apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif; }
+    body { margin: 0; background:#f6f6f7; color:#111; }
+    header { position: sticky; top: 0; background: #fff; padding: 14px 14px 10px; border-bottom: 1px solid #e5e5ea; z-index: 10; }
+    h1 { margin: 0; font-size: 18px; }
+    .sub { margin: 6px 0 0; font-size: 12px; color:#555; }
+    nav { display:flex; gap:8px; overflow:auto; padding: 10px 14px 12px; background:#fff; border-bottom: 1px solid #e5e5ea; }
+    nav button { border:1px solid #ddd; background:#fafafa; padding:8px 10px; border-radius: 999px; font-size: 13px; white-space: nowrap; }
+    nav button.active { background:#111; color:#fff; border-color:#111; }
+    main { padding: 14px; max-width: 980px; margin: 0 auto; }
+    .card { background:#fff; border:1px solid #e5e5ea; border-radius: 14px; padding: 12px; margin: 0 0 12px; }
+    .grid { display:grid; grid-template-columns: 1fr; gap:10px; }
+    @media (min-width: 800px){ .grid { grid-template-columns: 1fr 1fr; } }
+    label { display:block; font-size: 12px; color:#444; margin: 0 0 6px; }
+    input, textarea, select {
+      width: 100%; box-sizing: border-box;
+      border: 1px solid #ddd; border-radius: 10px;
+      padding: 10px; font-size: 14px; background:#fff;
+    }
+    textarea { min-height: 90px; resize: vertical; }
+    .row { display:flex; gap:10px; }
+    .row > * { flex:1; }
+    .actions { display:flex; gap:10px; flex-wrap: wrap; margin-top: 10px; }
+    .actions button {
+      border: none; border-radius: 10px; padding: 10px 12px;
+      background:#111; color:#fff; font-size: 14px;
+    }
+    .actions button.secondary { background:#e9e9ee; color:#111; }
+    .small { font-size: 12px; color:#666; }
+    .list { display:flex; flex-direction: column; gap:10px; }
+    .item { border:1px solid #eee; border-radius: 12px; padding: 10px; background:#fafafa; }
+    .item .meta { font-size: 12px; color:#666; display:flex; gap:10px; flex-wrap: wrap; }
+    .item .text { margin-top: 6px; white-space: pre-wrap; }
+    .danger { color: #b00020; }
+    a { color: inherit; }
+    code { background:#f1f1f4; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Fernihurst Manager Toolkit</h1>
+    <p class="sub">On-device log for Safety • Organisation • Mentoring (no names/PHI — use initials only).</p>
+  </header>
+
+  <nav id="tabs"></nav>
+
+  <main>
+    <section class="card">
+      <div class="row">
+        <div>
+          <label>Quick tag (optional)</label>
+          <input id="globalTag" placeholder="#safety #organisation #mentoring #followup" />
+        </div>
+        <div>
+          <label>Search</label>
+          <input id="search" placeholder="Search text…" />
+        </div>
+      </div>
+      <p class="small">Tip: Add to Home Screen in Safari: <b>Share</b> → <b>Add to Home Screen</b>.</p>
+    </section>
+
+    <section id="view"></section>
+  </main>
+
+<script>
+/** ---------------------------
+  Simple iPhone-friendly toolkit
+  Data stored in localStorage.
+  Export JSON/CSV for backup.
+---------------------------- */
+
+const LS_KEY = "fernihurst_toolkit_v1";
+const $ = (id) => document.getElementById(id);
+
+const modules = [
+  {
+    id: "safety",
+    title: "Safety",
+    fields: [
+      {k:"date", t:"Date", type:"date"},
+      {k:"shift", t:"Shift", type:"select", options:["Day","Night","Early","Late","Other"]},
+      {k:"unit", t:"Unit/Area", type:"text"},
+      {k:"category", t:"Category", type:"select", options:["Fall","Medication/Near miss","Behaviour","Safeguarding","Skin/Pressure","Infection control","Other"]},
+      {k:"risk", t:"Risk level", type:"select", options:["Low","Medium","High"]},
+      {k:"summary", t:"What happened (brief)", type:"textarea"},
+      {k:"action", t:"Immediate action taken", type:"textarea"},
+      {k:"followup", t:"Follow-up (who/when)", type:"textarea"},
+      {k:"learning", t:"Learning / prevention point", type:"textarea"},
+    ]
+  },
+  {
+    id: "handover",
+    title: "Organisation (Handover)",
+    fields: [
+      {k:"date", t:"Date", type:"date"},
+      {k:"shift", t:"Shift", type:"select", options:["Day","Night","Early","Late","Other"]},
+      {k:"unit", t:"Unit/Area", type:"text"},
+      {k:"staffing", t:"Staffing & skill mix (gaps/agency/skill)", type:"textarea"},
+      {k:"risks", t:"Operational risks (falls/behaviours/skin/meds/IC)", type:"textarea"},
+      {k:"priorities", t:"Top 3 priorities next shift", type:"textarea"},
+      {k:"tasks", t:"Outstanding tasks carried forward", type:"textarea"},
+      {k:"managerNotes", t:"Manager notes (what a manager must know)", type:"textarea"},
+    ]
+  },
+  {
+    id: "audits",
+    title: "Audits (CQC evidence)",
+    fields: [
+      {k:"date", t:"Date", type:"date"},
+      {k:"area", t:"Area checked", type:"select", options:["MAR spot-check","Infection control","Care plans","Call bells","Environment","Safeguarding","Hydration/Nutrition","Other"]},
+      {k:"standard", t:"Expected standard", type:"textarea"},
+      {k:"findings", t:"Findings", type:"textarea"},
+      {k:"action", t:"Action taken", type:"textarea"},
+      {k:"followUpDate", t:"Follow-up date", type:"date"},
+      {k:"riskPrevented", t:"Risk prevented (one line)", type:"text"},
+      {k:"cqc", t:"CQC domain(s)", type:"text", placeholder:"Safe / Effective / Caring / Responsive / Well-led"},
+    ]
+  },
+  {
+    id: "mentoring",
+    title: "Mentoring",
+    fields: [
+      {k:"date", t:"Date", type:"date"},
+      {k:"staff", t:"Staff member (initials only)", type:"text"},
+      {k:"area", t:"Area supported", type:"select", options:["Safety practice","Confidence","Documentation","Communication","Dementia care","Infection control","Medication practice","Other"]},
+      {k:"observed", t:"What I observed", type:"textarea"},
+      {k:"guidance", t:"Guidance given", type:"textarea"},
+      {k:"outcome", t:"Outcome / improvement seen", type:"textarea"},
+      {k:"followUpDate", t:"Follow-up date", type:"date"},
+    ]
+  },
+  {
+    id: "reflections",
+    title: "Reflections",
+    fields: [
+      {k:"date", t:"Date", type:"date"},
+      {k:"pillar", t:"Leadership pillar", type:"select", options:["Safety","Organisation","Mentoring"]},
+      {k:"what", t:"What happened", type:"textarea"},
+      {k:"soWhat", t:"So what? (impact/risk/learning)", type:"textarea"},
+      {k:"nowWhat", t:"Now what? (leadership action)", type:"textarea"},
+    ]
+  },
+  {
+    id: "projects",
+    title: "Projects",
+    fields: [
+      {k:"startDate", t:"Start date", type:"date"},
+      {k:"title", t:"Project title", type:"text"},
+      {k:"focus", t:"Focus area", type:"select", options:["Falls","Call bells","Medication safety","Hydration","Infection control","Documentation","Staff confidence","Other"]},
+      {k:"baseline", t:"Baseline (what is happening now?)", type:"textarea"},
+      {k:"intervention", t:"Action taken (what I changed)", type:"textarea"},
+      {k:"results", t:"Results (what improved?)", type:"textarea"},
+      {k:"next", t:"Next actions (sustain/coach/review)", type:"textarea"},
+      {k:"cqc", t:"CQC domain(s)", type:"text", placeholder:"Safe / Well-led etc."},
+      {k:"status", t:"Status", type:"select", options:["Planning","Active","Completed"]},
+    ]
+  },
+  {
+    id: "weekly",
+    title: "Weekly Review",
+    fields: [
+      {k:"weekOf", t:"Week commencing", type:"date"},
+      {k:"safety", t:"Safety overview (incidents, repeats, actions)", type:"textarea"},
+      {k:"org", t:"Organisation overview (handover/staffing/ops risks)", type:"textarea"},
+      {k:"mentor", t:"Mentoring overview (who supported, outcomes)", type:"textarea"},
+      {k:"wins", t:"What went well", type:"textarea"},
+      {k:"attention", t:"What needs attention next week", type:"textarea"},
+      {k:"learning", t:"Leadership learning", type:"textarea"},
+    ]
+  }
+];
+
+function loadDB(){
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || { items: [] }; }
+  catch { return { items: [] }; }
+}
+function saveDB(db){ localStorage.setItem(LS_KEY, JSON.stringify(db)); }
+
+function uid(){ return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+function todayISO(){
+  const d = new Date();
+  const pad = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+function renderTabs(activeId){
+  const nav = $("tabs");
+  nav.innerHTML = "";
+  modules.forEach(m => {
+    const b = document.createElement("button");
+    b.textContent = m.title;
+    b.className = m.id === activeId ? "active" : "";
+    b.onclick = () => renderModule(m.id);
+    nav.appendChild(b);
+  });
+}
+
+function fieldEl(field, prefix){
+  const id = `${prefix}_${field.k}`;
+  const wrap = document.createElement("div");
+
+  const lab = document.createElement("label");
+  lab.textContent = field.t;
+  wrap.appendChild(lab);
+
+  let el;
+  if(field.type === "textarea"){
+    el = document.createElement("textarea");
+  } else if(field.type === "select"){
+    el = document.createElement("select");
+    field.options.forEach(o => {
+      const opt = document.createElement("option");
+      opt.value = o; opt.textContent = o;
+      el.appendChild(opt);
+    });
+  } else {
+    el = document.createElement("input");
+    el.type = field.type || "text";
+  }
+  el.id = id;
+  if(field.placeholder) el.placeholder = field.placeholder;
+  wrap.appendChild(el);
+
+  // defaults
+  if(field.type === "date"){
+    el.value = todayISO();
+  }
+
+  return wrap;
+}
+
+function getValues(moduleId){
+  const m = modules.find(x => x.id === moduleId);
+  const prefix = `f_${moduleId}`;
+  const data = {};
+  m.fields.forEach(f => {
+    const el = document.getElementById(`${prefix}_${f.k}`);
+    data[f.k] = (el?.value ?? "").trim();
+  });
+  data.tags = $("globalTag").value.trim();
+  return data;
+}
+
+function addItem(moduleId){
+  const db = loadDB();
+  const data = getValues(moduleId);
+  const item = {
+    id: uid(),
+    moduleId,
+    createdAt: new Date().toISOString(),
+    data
+  };
+  db.items.unshift(item);
+  saveDB(db);
+  renderModule(moduleId);
+}
+
+function deleteItem(id, moduleId){
+  const db = loadDB();
+  db.items = db.items.filter(x => x.id !== id);
+  saveDB(db);
+  renderModule(moduleId);
+}
+
+function matchesSearch(item, q){
+  if(!q) return true;
+  const text = JSON.stringify(item.data).toLowerCase();
+  return text.includes(q.toLowerCase());
+}
+
+function renderList(moduleId){
+  const db = loadDB();
+  const q = $("search").value.trim();
+  const items = db.items.filter(x => x.moduleId === moduleId).filter(x => matchesSearch(x, q));
+  const wrap = document.createElement("div");
+  wrap.className = "list";
+
+  if(items.length === 0){
+    const p = document.createElement("p");
+    p.className = "small";
+    p.textContent = "No entries yet.";
+    wrap.appendChild(p);
+    return wrap;
+  }
+
+  items.slice(0, 30).forEach(it => {
+    const div = document.createElement("div");
+    div.className = "item";
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.innerHTML = `<span><b>${new Date(it.createdAt).toLocaleString()}</b></span>` +
+                     (it.data.tags ? `<span>${escapeHtml(it.data.tags)}</span>` : "");
+    div.appendChild(meta);
+
+    const txt = document.createElement("div");
+    txt.className = "text";
+    txt.textContent = prettyItem(it);
+    div.appendChild(txt);
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    const del = document.createElement("button");
+    del.className = "secondary";
+    del.textContent = "Delete";
+    del.onclick = () => {
+      if(confirm("Delete this entry?")) deleteItem(it.id, moduleId);
+    };
+    actions.appendChild(del);
+    div.appendChild(actions);
+
+    wrap.appendChild(div);
+  });
+
+  const foot = document.createElement("p");
+  foot.className = "small";
+  foot.textContent = "Showing latest 30 entries for this tab.";
+  wrap.appendChild(foot);
+
+  return wrap;
+}
+
+function prettyItem(it){
+  // Show key fields first
+  const d = it.data;
+  const lines = [];
+  const preferred = ["date","weekOf","startDate","shift","unit","category","risk","area","title","focus","status","staff","pillar"];
+  preferred.forEach(k => { if(d[k]) lines.push(`${labelize(k)}: ${d[k]}`); });
+
+  // Include the rest
+  Object.keys(d).forEach(k => {
+    if(preferred.includes(k) || k === "tags") return;
+    if(!d[k]) return;
+    lines.push(`${labelize(k)}: ${d[k]}`);
+  });
+  return lines.join("\n");
+}
+
+function labelize(k){
+  return k.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase());
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+function exportJSON(){
+  const db = loadDB();
+  const blob = new Blob([JSON.stringify(db, null, 2)], {type:"application/json"});
+  downloadBlob(blob, "fernihurst_toolkit_backup.json");
+}
+
+function exportCSV(){
+  const db = loadDB();
+  // Flatten all items into rows
+  const rows = db.items.map(it => {
+    const base = {
+      id: it.id,
+      module: it.moduleId,
+      createdAt: it.createdAt
+    };
+    return {...base, ...it.data};
+  });
+
+  // Collect columns
+  const cols = new Set();
+  rows.forEach(r => Object.keys(r).forEach(k => cols.add(k)));
+  const headers = Array.from(cols);
+
+  const csv = [
+    headers.join(","),
+    ...rows.map(r => headers.map(h => csvCell(r[h])).join(","))
+  ].join("\n");
+
+  const blob = new Blob([csv], {type:"text/csv"});
+  downloadBlob(blob, "fernihurst_toolkit_export.csv");
+}
+
+function csvCell(v){
+  if(v === undefined || v === null) return "";
+  const s = String(v).replaceAll('"','""');
+  return `"${s}"`;
+}
+
+function downloadBlob(blob, filename){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 1000);
+}
+
+function importJSON(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if(!parsed || !Array.isArray(parsed.items)) throw new Error("Invalid backup format");
+      saveDB(parsed);
+      alert("Import successful.");
+      renderModule(currentModuleId);
+    } catch(e){
+      alert("Import failed: " + e.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+let currentModuleId = modules[0].id;
+
+function renderModule(moduleId){
+  currentModuleId = moduleId;
+  renderTabs(moduleId);
+
+  const m = modules.find(x => x.id === moduleId);
+  const view = $("view");
+  view.innerHTML = "";
+
+  // Form card
+  const form = document.createElement("section");
+  form.className = "card";
+  const title = document.createElement("h2");
+  title.style.margin = "0 0 10px";
+  title.style.fontSize = "16px";
+  title.textContent = `New ${m.title} entry`;
+  form.appendChild(title);
+
+  const grid = document.createElement("div");
+  grid.className = "grid";
+  const prefix = `f_${moduleId}`;
+  m.fields.forEach(f => grid.appendChild(fieldEl(f, prefix)));
+  form.appendChild(grid);
+
+  const act = document.createElement("div");
+  act.className = "actions";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.textContent = "Save entry";
+  saveBtn.onclick = () => addItem(moduleId);
+  act.appendChild(saveBtn);
+
+  const clearBtn = document.createElement("button");
+  clearBtn.className = "secondary";
+  clearBtn.textContent = "Clear form";
+  clearBtn.onclick = () => renderModule(moduleId);
+  act.appendChild(clearBtn);
+
+  form.appendChild(act);
+
+  const hint = document.createElement("p");
+  hint.className = "small";
+  hint.innerHTML = `Use tags like <code>#safety</code> <code>#organisation</code> <code>#mentoring</code> <code>#followup</code> in the Quick tag field.`;
+  form.appendChild(hint);
+
+  view.appendChild(form);
+
+  // List card
+  const listCard = document.createElement("section");
+  listCard.className = "card";
+  const t2 = document.createElement("h2");
+  t2.style.margin = "0 0 10px";
+  t2.style.fontSize = "16px";
+  t2.textContent = `Recent ${m.title} entries`;
+  listCard.appendChild(t2);
+  listCard.appendChild(renderList(moduleId));
+  view.appendChild(listCard);
+
+  // Export/Import card
+  const tools = document.createElement("section");
+  tools.className = "card";
+  tools.innerHTML = `
+    <h2 style="margin:0 0 10px;font-size:16px;">Backup & Export</h2>
+    <p class="small">Backup regularly. Safari clearing data will remove local storage.</p>
+    <div class="actions">
+      <button id="expJson">Export JSON backup</button>
+      <button class="secondary" id="expCsv">Export CSV</button>
+      <label class="small" style="display:inline-block;padding:10px 12px;border:1px solid #ddd;border-radius:10px;background:#fafafa;">
+        Import JSON <input id="imp" type="file" accept="application/json" style="display:none" />
+      </label>
+    </div>
+    <p class="small danger"><b>Do not store resident names or sensitive details.</b> Use initials/room codes only.</p>
+  `;
+  view.appendChild(tools);
+
+  $("expJson").onclick = exportJSON;
+  $("expCsv").onclick = exportCSV;
+  $("imp").onchange = (e) => {
+    const file = e.target.files?.[0];
+    if(file) importJSON(file);
+  };
+}
+
+$("search").addEventListener("input", () => renderModule(currentModuleId));
+
+renderModule(currentModuleId);
+</script>
+</body>
+</html>
